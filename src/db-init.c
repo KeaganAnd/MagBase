@@ -12,7 +12,7 @@ char *getHelpContent(void) {
     filePtr = fopen("../docs/help-pages.txt", "r");
 
     if (!filePtr) {
-        return("Hm... The help file is missing? Why'd you delete that.\nYou can get a new one from the github repo:\nhttps://github.com/KeaganAnd/MagBase\n");
+        return("Hm... The help file is missing? Why'd you delete that.\nYou can get a new one from the github repo:\nhttps://github.com/KeaganAnd/MagBase/blob/main/docs/help-page.txt\n");
     }
 
     fseek(filePtr, 0, SEEK_END);
