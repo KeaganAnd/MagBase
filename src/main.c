@@ -13,6 +13,8 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "db-init.h"
+
 int main(int argc, char* argv[])  {
 
     if (argc == 1) {
@@ -24,6 +26,8 @@ int main(int argc, char* argv[])  {
     for (int i = 0; i < argc; i++) {
         if (!strcmp(argv[i], "-v") || !strcmp(argv[i], "-version")) { // strcmp returns 0 if they're equal, performs a binary comparison
             printf("Version %s\n", VERSION);
+        } else if (!strcmp(argv[i], "-h") || !strcmp(argv[i], "-help")) {
+            printf("%s", getHelpContent());
         }
     }
 }

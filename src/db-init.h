@@ -1,0 +1,1 @@
+char *getHelpContent(void);
