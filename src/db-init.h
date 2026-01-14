@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "buffer.h"
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -28,19 +29,18 @@ typedef struct {
 } Header;
 
 typedef struct {
-    char **pages;
-    size_t *page_ids;
-    int num_pages;
-    int *dirty_flags;
-} BufferPool;
-
-typedef struct {
     char *filePath;
     FILE *file_pointer;
     Header *header;
     BufferPool *buffer_pool;
     size_t page_size;
 } MagBase;
+
+typedef struct {
+    uint16_t slot_count;
+    uint16_t free_space_offset;
+    uint64_t next_page;
+} PageHeader;
 
 int freeDatabase(MagBase *magBase);
 MagBase *createMagBase(Header *header, char path[]);

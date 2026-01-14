@@ -11,5 +11,6 @@
 
 #define PAGE_SIZE 4096
 #define MAGIC "MAGDB.\0\0"
+#define BUFFER_SIZE 10
 
 extern Version version;

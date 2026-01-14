@@ -1,0 +1,39 @@
+PAGE (4096 bytes)
+
++-----------------------------+
+| Page Header                 |
++-----------------------------+
+| Slot 0 → offset 4000 len 20 |
+| Slot 1 → offset 3980 len 12 |
+| Slot 2 → offset 3960 len 18 |
++-----------------------------+
+|                             |
+|        FREE SPACE           |
+|                             |
++-----------------------------+
+| Record 2 (18 bytes)         |
+| Record 1 (12 bytes)         |
+| Record 0 (20 bytes)         |
++-----------------------------+
+
+1. Core Page Functions
+Function	Purpose
+allocate_page()	Create a new empty page in memory and assign it a page_id. Add it to the buffer pool.
+write_page(Page *p)	Flush a page to disk at page_id * PAGE_SIZE. Sets dirty = false.
+read_page(page_id)	Load a page from disk into memory (buffer pool). Returns a Page*.
+
+Optional helpers:
+
+init_page(Page *p, PageType type) → initialize header, slots, free space
+
+evict_page() → remove a page from the buffer pool, flushing if dirty
+
+2. Higher-Level Table Functions
+
+Once you have page primitives, the next layer is table-level operations:
+
+Function	Purpose
+insert_record(table, record)	Find page with enough free space, write record, update slots, mark page dirty
+delete_record(table, row_id)	Mark slot as deleted (length = 0), mark page dirty
+update_record(table, row_id, new_data)	If same size → overwrite; else → insert elsewhere and update slot
+select_record(table, row_id)	Fetch record via page_id + slot_id
