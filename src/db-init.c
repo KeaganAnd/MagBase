@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "buffer.h"
 #include "db-init.h"
 #include "globals.h"
 
@@ -55,13 +56,12 @@ bool checkIfFileExists(char *path) {
 }
 
 Header *createHeader(Header *newHeader) {
-
-    strcpy(newHeader->magic, MAGIC);
+    memcpy(newHeader->magic, MAGIC, MAGIC_LENGTH);
     newHeader->version = version;
-    newHeader->page_count = 1;
+    newHeader->page_count = 2;
     newHeader->page_size = PAGE_SIZE;
-    newHeader->schema_root = 0;
-    newHeader->free_list_head = 0;
+    newHeader->schema_root = 1;
+    newHeader->free_list_head = 2;
 
     return (newHeader);
 }
@@ -93,6 +93,8 @@ char *appendFileExt(char *path) {
     return path;
 }
 
+int createSchemaPage() { return 0; }
+
 int createDatabase(char *path) {
     char createNewDB[8];
     printf("Do you want to create a new database at %s (y/N): ", path);
@@ -118,12 +120,16 @@ int createDatabase(char *path) {
     return 0;
 }
 
-MagBase *createMagBase(Header *header, char path[]) {
+MagBase *createMagBase(Header *header, char path[], bool newFile) {
     MagBase *magBase = malloc(sizeof(MagBase));
     magBase->filePath = path;
-    magBase->file_pointer = fopen(path, "w");
-    magBase->buffer_pool = NULL;
-    magBase->header = createHeader(header);
+    if (newFile) {
+        magBase->file_pointer = fopen(path, "wb");
+    } else {
+        magBase->file_pointer = fopen(path, "r+b");
+    }
+    magBase->buffer_pool = createBufferPool();
+    magBase->header = header;
     magBase->page_size = PAGE_SIZE;
     return magBase;
 }
@@ -132,6 +138,7 @@ int freeDatabase(MagBase *magBase) {
     free(magBase->header);
     fclose(magBase->file_pointer);
     // free(magBase->filePath); // Not needed unless I decide to heap allocate the filepath
+    free(magBase->buffer_pool);
 
     free(magBase);
     return 0;

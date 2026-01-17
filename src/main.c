@@ -57,31 +57,48 @@ int main(int argc, char *argv[]) {
             Header *header = malloc(sizeof(Header));
             MagBase *magBase;
 
-            size_t length = fread(header, sizeof(Header), 1, tempFileP);
+            size_t length = fread(header, sizeof(Header), 1,
+                                  tempFileP); // If the file has no data write the boilerplate
             if (length != 1) {
                 if (feof(tempFileP)) {
                     printf("Database is empty, initializing...\n");
 
                     header = createHeader(header);
-                    magBase = createMagBase(header, path);
+                    magBase = createMagBase(header, path, true);
 
                     int result = writeHeader(magBase);
                     if (result == 0) {
                         printf("Database initialized.\n");
+                        fclose(tempFileP);
                     } else {
                         fprintf(stderr, "Database failed to initializing. ABORT\n");
+                        fclose(tempFileP);
                         exit(1);
                     }
                 }
-            } else {
+            } else { // If has data check validity and read data
 
                 if (strcmp(header->magic, MAGIC) != 0) {
                     fprintf(stderr, "This is not a valid MagDB, ensure you are opening the correct "
                                     "file or it may be corrupted.");
+                    fclose(tempFileP);
                     exit(1);
                 }
+                fclose(tempFileP); // Runtime pointer gets made for the struct below
 
-                magBase = createMagBase(header, path);
+                magBase = createMagBase(header, path, false);
+                printf("%d", magBase->header->version.major);
+                if (magBase->header->version.major != version.major) {
+
+                    if (magBase->header->version.major >= version.major) {
+                        printf("WARNING: Database file is ahead of app\n");
+                    } else {
+                        printf("WARNING: Database file is behind app\n");
+                    }
+                    printf("%d.%d.%d vs %d.%d.%d\n", magBase->header->version.major,
+                           magBase->header->version.minor, magBase->header->version.patch,
+                           version.major, version.minor, version.patch);
+                }
             }
 
             freeDatabase(magBase);

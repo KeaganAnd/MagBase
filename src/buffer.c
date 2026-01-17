@@ -62,7 +62,7 @@ int flushPage(BufferPool *buffer, MagBase *db, int pageIndex) {
     return 0;
 }
 
-int addToBuffer(BufferPool *buffer, size_t pageId, char *pageData) {
+int addToBuffer(BufferPool *buffer, size_t pageId, char *pageData, MagBase *db) {
     if (!buffer) {
         return 0;
     }
@@ -85,7 +85,7 @@ int addToBuffer(BufferPool *buffer, size_t pageId, char *pageData) {
 
     if (buffer->num_pages == BUFFER_SIZE) { // If the buffer is full, then flush oldest
         if (buffer->dirty_flags[BUFFER_SIZE - 1]) {
-            // TODO Write the page and flush it
+            flushPage(buffer, db, BUFFER_SIZE - 1);
         }
         buffer->num_pages--;
     }

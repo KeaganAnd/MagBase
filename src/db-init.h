@@ -4,7 +4,8 @@
 
 #pragma once
 
-#include "buffer.h"
+#include "globals.h"
+#include "structs/bufferStruct.h"
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -20,12 +21,12 @@ typedef struct {
 } Version;
 
 typedef struct {
-    char magic[8];           // The signature to confirm the file is a magdb file
-    Version version;         // the version num, duh
-    uint32_t page_size;      // size of a page (currently 4096)
-    uint64_t page_count;     // total pages
-    uint64_t schema_root;    // page number of the schema table
-    uint64_t free_list_head; // first free page
+    char magic[MAGIC_LENGTH]; // The signature to confirm the file is a magdb file
+    Version version;          // the version num, duh
+    uint32_t page_size;       // size of a page (currently 4096)
+    uint64_t page_count;      // total pages
+    uint64_t schema_root;     // page number of the schema table
+    uint64_t free_list_head;  // first free page
 } Header;
 
 typedef struct {
@@ -43,7 +44,9 @@ typedef struct {
 } PageHeader;
 
 int freeDatabase(MagBase *magBase);
-MagBase *createMagBase(Header *header, char path[]);
+MagBase *createMagBase(Header *header, char path[], bool newFile);
 int writeHeader(MagBase *magBase);
 Header *createHeader(Header *newHeader);
 char *appendFileExt(char *path);
+
+extern Version version;
