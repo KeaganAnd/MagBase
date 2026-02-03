@@ -114,45 +114,33 @@ char *readPageFromBuffer(BufferPool *buffer, size_t pageId, FILE *file_pointer, 
         }
     }
 
-    // Page not in buffer, read from disk
-    char *page_data = malloc(page_size);
-    if (!page_data) {
-        return NULL;
+    // Page not in buffer, need to load it
+    int slot = -1;
+
+    // If buffer not full, use next available slot
+    if (buffer->num_pages < BUFFER_SIZE) {
+        slot = buffer->num_pages;
+        buffer->num_pages++;
+    } else {
+        // Buffer full, reuse slot 0 (simple FIFO eviction)
+        slot = 0;
     }
 
-    // Seek to page location
+    // Read page from disk into the buffer slot
     if (fseek(file_pointer, pageId * page_size, SEEK_SET) != 0) {
-        free(page_data);
         return NULL;
     }
 
-    // Read page data
-    if (fread(page_data, page_size, 1, file_pointer) != 1) {
-        // If read fails, initialize with zeros (new page)
-        memset(page_data, 0, page_size);
+    size_t bytes_read = fread(buffer->pages[slot], page_size, 1, file_pointer);
+    if (bytes_read != 1) {
+        // If read fails (e.g., new page), initialize with zeros
+        memset(buffer->pages[slot], 0, page_size);
     }
 
-    // Add to buffer (don't pass MagBase, just track in buffer)
-    if (buffer->num_pages >= BUFFER_SIZE) {
-        // Buffer full, evict oldest
-        if (buffer->dirty_flags[BUFFER_SIZE - 1]) {
-            // In real implementation, would flush to disk
-            // For now just discard
-        }
-        buffer->num_pages--;
-    }
+    buffer->page_ids[slot] = pageId;
+    buffer->dirty_flags[slot] = 0;
 
-    // Shift existing pages and add new one at front
-    memmove(&buffer->pages[1], &buffer->pages[0], sizeof(char *) * buffer->num_pages);
-    memmove(&buffer->page_ids[1], &buffer->page_ids[0], sizeof(size_t) * buffer->num_pages);
-    memmove(&buffer->dirty_flags[1], &buffer->dirty_flags[0], sizeof(int) * buffer->num_pages);
-
-    buffer->pages[0] = page_data;
-    buffer->page_ids[0] = pageId;
-    buffer->dirty_flags[0] = 0;
-    buffer->num_pages++;
-
-    return buffer->pages[0];
+    return buffer->pages[slot];
 }
 
 int markPageDirty(BufferPool *buffer, size_t pageId) {
@@ -168,4 +156,27 @@ int markPageDirty(BufferPool *buffer, size_t pageId) {
     }
 
     return -1;  // Page not found in buffer
+}
+
+int flushAllDirtyPages(BufferPool *buffer, MagBase *db) {
+    if (!buffer || !db) {
+        return -1;
+    }
+
+    for (int i = 0; i < buffer->num_pages; i++) {
+        if (buffer->dirty_flags[i]) {
+            if (fseek(db->file_pointer, buffer->page_ids[i] * db->page_size, SEEK_SET) != 0) {
+                fprintf(stderr, "Failed to seek while flushing page %zu\n", buffer->page_ids[i]);
+                return -1;
+            }
+            if (fwrite(buffer->pages[i], db->page_size, 1, db->file_pointer) != 1) {
+                fprintf(stderr, "Failed to write while flushing page %zu\n", buffer->page_ids[i]);
+                return -1;
+            }
+            buffer->dirty_flags[i] = 0;
+        }
+    }
+
+    fflush(db->file_pointer);
+    return 0;
 }

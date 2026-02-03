@@ -108,6 +108,12 @@ static size_t deserializeRecord(uint8_t *buffer, Record *record) {
     memcpy(&record->field_count, ptr, sizeof(uint16_t));
     ptr += sizeof(uint16_t);
 
+    // Validate field count
+    if (record->field_count > MAX_COLUMNS) {
+        record->field_count = 0;
+        return (size_t)(ptr - buffer);
+    }
+
     // Read fields
     for (uint16_t i = 0; i < record->field_count; i++) {
         memcpy(&record->fields[i].type, ptr, sizeof(uint8_t));
@@ -130,6 +136,12 @@ static size_t deserializeRecord(uint8_t *buffer, Record *record) {
                     uint16_t text_len = 0;
                     memcpy(&text_len, ptr, sizeof(uint16_t));
                     ptr += sizeof(uint16_t);
+
+                    // Validate text length
+                    if (text_len > MAX_RECORD_VALUE_SIZE) {
+                        text_len = MAX_RECORD_VALUE_SIZE - 1;
+                    }
+
                     memcpy(record->fields[i].value.text_val, ptr, text_len);
                     record->fields[i].value.text_val[text_len] = '\0';
                     ptr += text_len;
@@ -188,8 +200,12 @@ uint64_t insertRecord(MagBase *db, Record *record) {
         // Allocate first data page
         page_num = db->header->page_count++;
         schema->root_page = page_num;
-        deleteTableSchema(db, record->table_id);
-        writeTableSchema(db, schema);
+        // Update the schema with the new root_page
+        if (updateTableSchema(db, schema) != 0) {
+            fprintf(stderr, "[ERROR] Failed to update table schema with root_page\n");
+            free(schema);
+            return 0;
+        }
     }
 
     char *page_buffer = readPageFromBuffer(db->buffer_pool, page_num, db->file_pointer, db->page_size);
@@ -199,6 +215,14 @@ uint64_t insertRecord(MagBase *db, Record *record) {
     }
 
     PageHeader *page_header = (PageHeader *)page_buffer;
+    
+    // Initialize header if this is a new/empty page
+    if (page_header->free_space_offset == 0) {
+        page_header->slot_count = 0;
+        page_header->free_space_offset = sizeof(PageHeader);
+        page_header->next_page = 0;
+    }
+    
     uint16_t available_space = db->page_size - page_header->free_space_offset;
 
     // Check if record fits

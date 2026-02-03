@@ -29,6 +29,10 @@ TableSchemaRecord **readAllTableSchemas(MagBase *db, uint16_t *num_tables);
 // Returns 0 on success, -1 on error
 int deleteTableSchema(MagBase *db, uint16_t table_id);
 
+// Update a table schema in-place (for updating root_page, etc.)
+// Returns 0 on success, -1 on error  
+int updateTableSchema(MagBase *db, TableSchemaRecord *schema);
+
 // Add a column to an existing table schema
 // Returns 0 on success, -1 on error
 int addColumnToTable(MagBase *db, uint16_t table_id, SchemaColumn *column);

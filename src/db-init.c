@@ -69,28 +69,29 @@ Header *createHeader(Header *newHeader) {
 int writeHeader(MagBase *magBase) {
     fseek(magBase->file_pointer, 0, SEEK_SET);
     fwrite(magBase->header, sizeof(Header), 1, magBase->file_pointer);
+    fflush(magBase->file_pointer);
     return 0;
 }
 
 char *appendFileExt(char *path) {
-    char lastFour[5];
-    int lastFourOffset = 0;
-
-    if (strlen(path) >= 4) {
-        for (int i = strlen(path) - 4; i < strlen(path); i++) {
-            lastFour[lastFourOffset] = path[i];
-            lastFourOffset++;
-        }
-        lastFour[4] = '\0';
-        // Last four chars are found to looks for the file extension
-        if (strcmp(lastFour, ".mab") != 0) {
-            // Path does not already have the file extension, need to append.
-            strcat(path, ".mab");
-        }
-    } else {
-        strcat(path, ".mab");
+    // DEPRECATED: Use local buffer handling in caller instead
+    // This function is kept for backwards compatibility with -p command
+    static char buffer[512];  // Large enough for most paths
+    static int buffer_index = 0;
+    
+    // Rotate through multiple buffers to avoid overwriting
+    int index = buffer_index;
+    buffer_index = (buffer_index + 1) % 4;
+    
+    char *result = &buffer[index * 128];
+    
+    strncpy(result, path, 123);
+    result[123] = '\0';
+    
+    if (strlen(result) < 4 || strcmp(&result[strlen(result) - 4], ".mab") != 0) {
+        strcat(result, ".mab");
     }
-    return path;
+    return result;
 }
 
 int createSchemaPage() { return 0; }
@@ -135,6 +136,9 @@ MagBase *createMagBase(Header *header, char path[], bool newFile) {
 }
 
 int freeDatabase(MagBase *magBase) {
+    // Flush all dirty pages before closing
+    flushAllDirtyPages(magBase->buffer_pool, magBase);
+
     free(magBase->header);
     fclose(magBase->file_pointer);
     // free(magBase->filePath); // Not needed unless I decide to heap allocate the filepath

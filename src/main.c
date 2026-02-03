@@ -16,6 +16,7 @@
 #include "globals.h"
 #include "schema.h"
 #include "records.h"
+#include "buffer.h"
 #include "structs/schemaStruct.h"
 
 Version version = {DB_VERSION_MAJOR, DB_VERSION_MINOR, DB_VERSION_PATCH};
@@ -115,6 +116,10 @@ int main(int argc, char *argv[]) {
                 exit(1);
             }
 
+            if (i + 1 >= argc) {
+                fprintf(stderr, "Error: database path required\n");
+                exit(1);
+            }
             char *path = appendFileExt(argv[++i]);
             char *table_name = argv[++i];
             uint16_t num_columns = (uint16_t)atoi(argv[++i]);
@@ -184,6 +189,8 @@ int main(int argc, char *argv[]) {
 
             int table_id = writeTableSchema(db, schema);
             if (table_id > 0) {
+                // Flush all dirty pages before writing header
+                flushAllDirtyPages(db->buffer_pool, db);
                 writeHeader(db);
                 printf("Table '%s' created with ID %d\n", table_name, table_id);
             } else {
@@ -196,6 +203,10 @@ int main(int argc, char *argv[]) {
 
         } else if (!strcmp(argv[i], "-list-tables")) {
             // List all tables in the database
+            if (i + 1 >= argc) {
+                fprintf(stderr, "Usage: -list-tables <db_path>\n");
+                exit(1);
+            }
             char *path = appendFileExt(argv[++i]);
 
             FILE *dbFile = fopen(path, "r+b");
@@ -255,6 +266,10 @@ int main(int argc, char *argv[]) {
                 exit(1);
             }
 
+            if (i + 1 >= argc) {
+                fprintf(stderr, "Error: database path required\n");
+                exit(1);
+            }
             char *path = appendFileExt(argv[++i]);
             uint16_t table_id = (uint16_t)atoi(argv[++i]);
 
@@ -275,6 +290,7 @@ int main(int argc, char *argv[]) {
 
             int result = deleteTableSchema(db, table_id);
             if (result == 0) {
+                flushAllDirtyPages(db->buffer_pool, db);
                 writeHeader(db);
                 printf("Table with ID %d deleted\n", table_id);
             } else {
@@ -292,10 +308,22 @@ int main(int argc, char *argv[]) {
                 exit(1);
             }
 
-            char *path = appendFileExt(argv[++i]);
+            if (i + 1 >= argc) {
+                fprintf(stderr, "Error: database path required\n");
+                exit(1);
+            }
+            
+            // Create path buffer on stack to avoid corrupting argv
+            char path_buffer[256];
+            strncpy(path_buffer, argv[++i], sizeof(path_buffer) - 5);
+            path_buffer[sizeof(path_buffer) - 5] = '\0';
+            if (strlen(path_buffer) < 4 || strcmp(&path_buffer[strlen(path_buffer) - 4], ".mab") != 0) {
+                strcat(path_buffer, ".mab");
+            }
+            
             uint16_t table_id = (uint16_t)atoi(argv[++i]);
 
-            FILE *dbFile = fopen(path, "r+b");
+            FILE *dbFile = fopen(path_buffer, "r+b");
             if (!dbFile) {
                 fprintf(stderr, "Failed to open database file\n");
                 exit(1);
@@ -308,7 +336,7 @@ int main(int argc, char *argv[]) {
                 exit(1);
             }
 
-            MagBase *db = createMagBase(header, path, false);
+            MagBase *db = createMagBase(header, path_buffer, false);
             TableSchemaRecord *schema = readTableSchema(db, table_id);
             if (!schema) {
                 fprintf(stderr, "Table not found\n");
@@ -347,6 +375,7 @@ int main(int argc, char *argv[]) {
 
             uint64_t record_id = insertRecord(db, record);
             if (record_id > 0) {
+                flushAllDirtyPages(db->buffer_pool, db);
                 writeHeader(db);
                 printf("Record inserted with ID %lu\n", record_id);
             } else {
@@ -362,6 +391,10 @@ int main(int argc, char *argv[]) {
             // Read a specific record
             // Usage: -read-record <db_path> <table_id> <record_id>
             if (i + 3 >= argc) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "Error: database path required\n");
+                exit(1);
+            }
                 fprintf(stderr, "Usage: -read-record <db_path> <table_id> <record_id>\n");
                 exit(1);
             }
@@ -429,10 +462,22 @@ int main(int argc, char *argv[]) {
                 exit(1);
             }
 
-            char *path = appendFileExt(argv[++i]);
+            if (i + 1 >= argc) {
+                fprintf(stderr, "Error: database path required\n");
+                exit(1);
+            }
+            
+            // Create path buffer on stack to avoid corrupting argv
+            char path_buffer[256];
+            strncpy(path_buffer, argv[++i], sizeof(path_buffer) - 5);
+            path_buffer[sizeof(path_buffer) - 5] = '\0';
+            if (strlen(path_buffer) < 4 || strcmp(&path_buffer[strlen(path_buffer) - 4], ".mab") != 0) {
+                strcat(path_buffer, ".mab");
+            }
+            
             uint16_t table_id = (uint16_t)atoi(argv[++i]);
 
-            FILE *dbFile = fopen(path, "r+b");
+            FILE *dbFile = fopen(path_buffer, "r+b");
             if (!dbFile) {
                 fprintf(stderr, "Failed to open database file\n");
                 exit(1);
@@ -445,7 +490,7 @@ int main(int argc, char *argv[]) {
                 exit(1);
             }
 
-            MagBase *db = createMagBase(header, path, false);
+            MagBase *db = createMagBase(header, path_buffer, false);
             TableSchemaRecord *schema = readTableSchema(db, table_id);
             if (!schema) {
                 fprintf(stderr, "Table not found\n");
@@ -498,6 +543,10 @@ int main(int argc, char *argv[]) {
                 exit(1);
             }
 
+            if (i + 1 >= argc) {
+                fprintf(stderr, "Error: database path required\n");
+                exit(1);
+            }
             char *path = appendFileExt(argv[++i]);
             uint16_t table_id = (uint16_t)atoi(argv[++i]);
             uint64_t record_id = (uint64_t)atoll(argv[++i]);
@@ -559,6 +608,7 @@ int main(int argc, char *argv[]) {
 
             int result = updateRecord(db, record);
             if (result == 0) {
+                flushAllDirtyPages(db->buffer_pool, db);
                 writeHeader(db);
                 printf("Record updated\n");
             } else {
@@ -566,6 +616,10 @@ int main(int argc, char *argv[]) {
             }
 
             freeRecord(record);
+            if (i + 1 >= argc) {
+                fprintf(stderr, "Error: database path required\n");
+                exit(1);
+            }
             free(schema);
             freeDatabase(db);
             exit(0);
@@ -599,6 +653,7 @@ int main(int argc, char *argv[]) {
 
             int result = deleteRecord(db, table_id, record_id);
             if (result == 0) {
+                flushAllDirtyPages(db->buffer_pool, db);
                 writeHeader(db);
                 printf("Record deleted\n");
             } else {

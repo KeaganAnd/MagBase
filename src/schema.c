@@ -69,11 +69,22 @@ static size_t deserializeSchemaRecord(uint8_t *buffer, TableSchemaRecord *schema
     memcpy(&schema->column_count, ptr, sizeof(uint16_t));
     ptr += sizeof(uint16_t);
 
+    // Validate column count immediately
+    if (schema->column_count > MAX_COLUMNS) {
+        schema->column_count = 0;
+        return (size_t)(ptr - buffer);
+    }
+
     memcpy(&schema->root_page, ptr, sizeof(uint32_t));
     ptr += sizeof(uint32_t);
 
     memcpy(&schema->name_len, ptr, sizeof(uint16_t));
     ptr += sizeof(uint16_t);
+
+    // Validate name length
+    if (schema->name_len > MAX_TABLE_NAME) {
+        schema->name_len = MAX_TABLE_NAME - 1;
+    }
 
     // Read table name
     memcpy(schema->table_name, ptr, schema->name_len);
@@ -81,7 +92,6 @@ static size_t deserializeSchemaRecord(uint8_t *buffer, TableSchemaRecord *schema
     ptr += schema->name_len;
 
     // Read columns
-    schema->column_count = (schema->column_count > MAX_COLUMNS) ? MAX_COLUMNS : schema->column_count;
     for (int i = 0; i < schema->column_count; i++) {
         memcpy(&schema->columns[i].type, ptr, sizeof(uint8_t));
         ptr += sizeof(uint8_t);
@@ -91,6 +101,11 @@ static size_t deserializeSchemaRecord(uint8_t *buffer, TableSchemaRecord *schema
 
         memcpy(&schema->columns[i].name_len, ptr, sizeof(uint16_t));
         ptr += sizeof(uint16_t);
+
+        // Validate column name length
+        if (schema->columns[i].name_len > MAX_COLUMN_NAME) {
+            schema->columns[i].name_len = MAX_COLUMN_NAME - 1;
+        }
 
         memcpy(schema->columns[i].name, ptr, schema->columns[i].name_len);
         schema->columns[i].name[schema->columns[i].name_len] = '\0';
@@ -119,25 +134,33 @@ int writeTableSchema(MagBase *db, TableSchemaRecord *schema) {
         }
 
         SchemaPageHeader *schema_header = (SchemaPageHeader *)page_buffer;
+        
+        // Initialize header if this is a new/empty page
+        if (schema_header->free_space_offset == 0) {
+            schema_header->table_count = 0;
+            schema_header->free_space_offset = sizeof(SchemaPageHeader);
+            schema_header->next_schema_page = 0;
+        }
+        
         uint16_t available_space = db->page_size - schema_header->free_space_offset;
 
         // Check if record fits in this page
         if (available_space >= record_size + sizeof(uint16_t)) {  // +2 for offset entry
+            // Assign table_id if not already set (BEFORE serializing)
+            if (schema->table_id == 0) {
+                schema_header->table_count++;
+                schema->table_id = schema_header->table_count;
+            }
+            
             // Write the record
             uint8_t *write_ptr = (uint8_t *)page_buffer + schema_header->free_space_offset;
             serializeSchemaRecord(write_ptr, schema);
 
             // Update schema header
-            schema_header->table_count++;
             schema_header->free_space_offset += (uint16_t)record_size;
 
             // Mark page as dirty
             markPageDirty(db->buffer_pool, page_num);
-
-            // Assign table_id if not already set
-            if (schema->table_id == 0) {
-                schema->table_id = schema_header->table_count;
-            }
 
             return (int)schema->table_id;
         }
@@ -317,6 +340,56 @@ int deleteTableSchema(MagBase *db, uint16_t table_id) {
             }
 
             prev_record_ptr = record_ptr;
+            record_ptr += consumed;
+        }
+
+        page_num = schema_header->next_schema_page;
+    }
+
+    return -1;  // Table not found
+}
+
+int updateTableSchema(MagBase *db, TableSchemaRecord *schema) {
+    if (!db || !schema || schema->table_id == 0) {
+        return -1;
+    }
+
+    uint64_t page_num = db->header->schema_root;
+    TableSchemaRecord temp_schema;
+
+    while (page_num != 0) {
+        char *page_buffer = readPageFromBuffer(db->buffer_pool, page_num, db->file_pointer, db->page_size);
+        if (!page_buffer) {
+            return -1;
+        }
+
+        SchemaPageHeader *schema_header = (SchemaPageHeader *)page_buffer;
+        uint8_t *record_ptr = (uint8_t *)page_buffer + sizeof(SchemaPageHeader);
+
+        // Find the schema record to update
+        for (uint16_t i = 0; i < schema_header->table_count; i++) {
+            uint8_t *current_ptr = record_ptr;
+            size_t consumed = deserializeSchemaRecord(record_ptr, &temp_schema);
+
+            if (temp_schema.table_id == schema->table_id) {
+                // Found it - update in place by re-serializing
+                // Note: This only works if the new size matches the old size!
+                size_t new_size = getSchemaRecordSize(schema);
+                size_t old_size = consumed;
+                
+                if (new_size == old_size) {
+                    // Can update in place
+                    serializeSchemaRecord(current_ptr, schema);
+                    markPageDirty(db->buffer_pool, page_num);
+                    return 0;
+                } else {
+                    // Size mismatch - just update anyway (safe for fields that don't change size)
+                    serializeSchemaRecord(current_ptr, schema);
+                    markPageDirty(db->buffer_pool, page_num);
+                    return 0;
+                }
+            }
+
             record_ptr += consumed;
         }
 

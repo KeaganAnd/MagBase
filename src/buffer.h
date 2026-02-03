@@ -19,3 +19,7 @@ char *readPageFromBuffer(BufferPool *buffer, size_t pageId, FILE *file_pointer, 
 // Mark a page as dirty (modified) in the buffer
 // Returns 0 on success, -1 on error
 int markPageDirty(BufferPool *buffer, size_t pageId);
+
+// Flush all dirty pages in the buffer to disk
+// Returns 0 on success, -1 on error
+int flushAllDirtyPages(BufferPool *buffer, MagBase *db);
