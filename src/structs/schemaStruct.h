@@ -19,6 +19,7 @@ typedef struct {
     uint16_t table_id;
     uint16_t column_count;
     uint32_t root_page;
+    uint64_t next_record_id;    // Next sequential record ID
     uint16_t name_len;
     char table_name[MAX_TABLE_NAME];
     SchemaColumn columns[MAX_COLUMNS];

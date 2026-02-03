@@ -12,9 +12,9 @@
 
 // Calculate the serialized size of a TableSchemaRecord
 static size_t getSchemaRecordSize(TableSchemaRecord *schema) {
-    // Fixed fields: table_id (2) + column_count (2) + root_page (4) + name_len (2)
+    // Fixed fields: table_id (2) + column_count (2) + root_page (4) + next_record_id (8) + name_len (2)
     // Variable: table_name (up to MAX_TABLE_NAME) + columns array (MAX_COLUMNS * size)
-    size_t size = sizeof(uint16_t) + sizeof(uint16_t) + sizeof(uint32_t) + sizeof(uint16_t);
+    size_t size = sizeof(uint16_t) + sizeof(uint16_t) + sizeof(uint32_t) + sizeof(uint64_t) + sizeof(uint16_t);
     size += schema->name_len;  // actual name length
     size += schema->column_count * sizeof(SchemaColumn);
     return size;
@@ -33,6 +33,9 @@ static void serializeSchemaRecord(uint8_t *buffer, TableSchemaRecord *schema) {
 
     memcpy(ptr, &schema->root_page, sizeof(uint32_t));
     ptr += sizeof(uint32_t);
+
+    memcpy(ptr, &schema->next_record_id, sizeof(uint64_t));
+    ptr += sizeof(uint64_t);
 
     memcpy(ptr, &schema->name_len, sizeof(uint16_t));
     ptr += sizeof(uint16_t);
@@ -77,6 +80,9 @@ static size_t deserializeSchemaRecord(uint8_t *buffer, TableSchemaRecord *schema
 
     memcpy(&schema->root_page, ptr, sizeof(uint32_t));
     ptr += sizeof(uint32_t);
+
+    memcpy(&schema->next_record_id, ptr, sizeof(uint64_t));
+    ptr += sizeof(uint64_t);
 
     memcpy(&schema->name_len, ptr, sizeof(uint16_t));
     ptr += sizeof(uint16_t);

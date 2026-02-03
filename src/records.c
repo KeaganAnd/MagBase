@@ -189,8 +189,11 @@ uint64_t insertRecord(MagBase *db, Record *record) {
         return 0;
     }
 
-    // Generate record_id (simple increment from root page)
-    record->record_id = 1;  // TODO: implement proper record ID generation
+    // Generate record_id from schema's next_record_id (only if not already set)
+    if (record->record_id == 0) {
+        record->record_id = schema->next_record_id;
+        schema->next_record_id++;
+    }
 
     size_t record_size = getRecordSize(record);
 
@@ -255,6 +258,9 @@ uint64_t insertRecord(MagBase *db, Record *record) {
     page_header->free_space_offset += (uint16_t)record_size;
 
     markPageDirty(db->buffer_pool, page_num);
+
+    // Persist updated next_record_id to schema
+    updateTableSchema(db, schema);
     free(schema);
 
     return record->record_id;
@@ -310,20 +316,69 @@ Record *readRecord(MagBase *db, uint16_t table_id, uint64_t record_id) {
 }
 
 int updateRecord(MagBase *db, Record *record) {
-    if (!db || !record || record->record_id == 0) {
+    if (!db || !record || record->record_id == 0 || record->table_id == 0) {
         return -1;
     }
 
-    // Delete the old record and insert the updated one
-    if (deleteRecord(db, record->table_id, record->record_id) == 0) {
-        uint64_t new_id = insertRecord(db, record);
-        if (new_id > 0) {
-            record->record_id = new_id;
-            return 0;
-        }
+    TableSchemaRecord *schema = readTableSchema(db, record->table_id);
+    if (!schema) {
+        return -1;
     }
 
-    return -1;
+    uint64_t page_num = schema->root_page;
+
+    while (page_num != 0) {
+        char *page_buffer = readPageFromBuffer(db->buffer_pool, page_num, db->file_pointer, db->page_size);
+        if (!page_buffer) {
+            free(schema);
+            return -1;
+        }
+
+        PageHeader *page_header = (PageHeader *)page_buffer;
+        uint8_t *record_ptr = (uint8_t *)page_buffer + sizeof(PageHeader);
+
+        // Find the record to update
+        for (uint16_t i = 0; i < page_header->slot_count; i++) {
+            Record temp_record = {0};
+            temp_record.fields = malloc(schema->column_count * sizeof(RecordField));
+            if (!temp_record.fields) {
+                free(schema);
+                return -1;
+            }
+            temp_record.field_count = schema->column_count;
+
+            deserializeRecord(record_ptr, &temp_record);
+
+            if (temp_record.record_id == record->record_id) {
+                // Found it - only allow updates if new record is same size or smaller
+                size_t old_size = getRecordSize(&temp_record);
+                size_t new_size = getRecordSize(record);
+                
+                if (new_size <= old_size) {
+                    // Safe to update in place
+                    serializeRecord(record_ptr, record);
+                    markPageDirty(db->buffer_pool, page_num);
+                    free(temp_record.fields);
+                    free(schema);
+                    return 0;
+                } else {
+                    // Record is getting larger - cannot update in place
+                    free(temp_record.fields);
+                    free(schema);
+                    return -1;
+                }
+            }
+
+            size_t consumed = getRecordSize(&temp_record);
+            free(temp_record.fields);
+            record_ptr += consumed;
+        }
+
+        page_num = page_header->next_page;
+    }
+
+    free(schema);
+    return -1;  // Record not found
 }
 
 int deleteRecord(MagBase *db, uint16_t table_id, uint64_t record_id) {

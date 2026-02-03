@@ -149,6 +149,7 @@ int main(int argc, char *argv[]) {
             schema->table_id = 0;  // Will be assigned by writeTableSchema
             schema->column_count = num_columns;
             schema->root_page = 0;  // Will be assigned later
+            schema->next_record_id = 1;  // Start record IDs from 1
             schema->name_len = (uint16_t)strlen(table_name);
             strncpy(schema->table_name, table_name, MAX_TABLE_NAME - 1);
 
@@ -391,10 +392,6 @@ int main(int argc, char *argv[]) {
             // Read a specific record
             // Usage: -read-record <db_path> <table_id> <record_id>
             if (i + 3 >= argc) {
-            if (i + 1 >= argc) {
-                fprintf(stderr, "Error: database path required\n");
-                exit(1);
-            }
                 fprintf(stderr, "Usage: -read-record <db_path> <table_id> <record_id>\n");
                 exit(1);
             }
@@ -543,10 +540,6 @@ int main(int argc, char *argv[]) {
                 exit(1);
             }
 
-            if (i + 1 >= argc) {
-                fprintf(stderr, "Error: database path required\n");
-                exit(1);
-            }
             char *path = appendFileExt(argv[++i]);
             uint16_t table_id = (uint16_t)atoi(argv[++i]);
             uint64_t record_id = (uint64_t)atoll(argv[++i]);
@@ -616,10 +609,6 @@ int main(int argc, char *argv[]) {
             }
 
             freeRecord(record);
-            if (i + 1 >= argc) {
-                fprintf(stderr, "Error: database path required\n");
-                exit(1);
-            }
             free(schema);
             freeDatabase(db);
             exit(0);
