@@ -1,3 +1,6 @@
+#ifndef SCHEMA_STRUCT_H
+#define SCHEMA_STRUCT_H
+
 #include <stdint.h>
 #define MAX_COLUMN_NAME 32
 #define MAX_TABLE_NAME 32
@@ -26,3 +29,4 @@ typedef struct {
     uint16_t free_space_offset;
     uint32_t next_schema_page;
 } SchemaPageHeader;
+#endif  // SCHEMA_STRUCT_H

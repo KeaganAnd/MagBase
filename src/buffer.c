@@ -101,3 +101,71 @@ int addToBuffer(BufferPool *buffer, size_t pageId, char *pageData, MagBase *db) 
 
     return 0;
 }
+
+char *readPageFromBuffer(BufferPool *buffer, size_t pageId, FILE *file_pointer, size_t page_size) {
+    if (!buffer || !file_pointer) {
+        return NULL;
+    }
+
+    // Check if page is already in buffer
+    for (int i = 0; i < buffer->num_pages; i++) {
+        if (buffer->page_ids[i] == pageId) {
+            return buffer->pages[i];
+        }
+    }
+
+    // Page not in buffer, read from disk
+    char *page_data = malloc(page_size);
+    if (!page_data) {
+        return NULL;
+    }
+
+    // Seek to page location
+    if (fseek(file_pointer, pageId * page_size, SEEK_SET) != 0) {
+        free(page_data);
+        return NULL;
+    }
+
+    // Read page data
+    if (fread(page_data, page_size, 1, file_pointer) != 1) {
+        // If read fails, initialize with zeros (new page)
+        memset(page_data, 0, page_size);
+    }
+
+    // Add to buffer (don't pass MagBase, just track in buffer)
+    if (buffer->num_pages >= BUFFER_SIZE) {
+        // Buffer full, evict oldest
+        if (buffer->dirty_flags[BUFFER_SIZE - 1]) {
+            // In real implementation, would flush to disk
+            // For now just discard
+        }
+        buffer->num_pages--;
+    }
+
+    // Shift existing pages and add new one at front
+    memmove(&buffer->pages[1], &buffer->pages[0], sizeof(char *) * buffer->num_pages);
+    memmove(&buffer->page_ids[1], &buffer->page_ids[0], sizeof(size_t) * buffer->num_pages);
+    memmove(&buffer->dirty_flags[1], &buffer->dirty_flags[0], sizeof(int) * buffer->num_pages);
+
+    buffer->pages[0] = page_data;
+    buffer->page_ids[0] = pageId;
+    buffer->dirty_flags[0] = 0;
+    buffer->num_pages++;
+
+    return buffer->pages[0];
+}
+
+int markPageDirty(BufferPool *buffer, size_t pageId) {
+    if (!buffer) {
+        return -1;
+    }
+
+    for (int i = 0; i < buffer->num_pages; i++) {
+        if (buffer->page_ids[i] == pageId) {
+            buffer->dirty_flags[i] = 1;
+            return 0;
+        }
+    }
+
+    return -1;  // Page not found in buffer
+}

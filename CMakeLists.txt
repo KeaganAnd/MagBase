@@ -9,6 +9,8 @@ set(SOURCES
     src/db-init.c
     src/db-actions.c
     src/buffer.c
+    src/schema.c
+    src/records.c
 )
 
 set(HEADERS
@@ -16,6 +18,8 @@ set(HEADERS
     src/buffer.h
     src/db-init.h
     src/db-actions.h
+    src/schema.h
+    src/records.h
 )
 
 add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})
